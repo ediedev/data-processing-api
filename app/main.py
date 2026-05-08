@@ -1,5 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
+from io import StringIO
+
 from app.processor import clean_csv
 
 app = FastAPI()
@@ -10,22 +12,24 @@ def root():
 
 @app.post("/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
-    try:
-        # Read file content
-        content = await file.read()
 
-        # Process file
-        df = clean_csv(content)
+    # Read uploaded file
+    content = await file.read()
 
-        # Convert to JSON response
-        result = df.to_dict(orient="records")
+    # Process dataframe
+    df = clean_csv(content)
 
-        return JSONResponse(content={
-            "rows": len(result),
-            "data": result
-        })
+    # Convert cleaned dataframe back to CSV
+    output = StringIO()
+    df.to_csv(output, index=False)
 
-    except Exception as e:
-        return JSONResponse(content={
-            "error": str(e)
-        })
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=cleaned_data.csv"
+        }
+    )
